@@ -1,5 +1,6 @@
 // lib/services/api_service.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'storage_service.dart';
 
@@ -20,6 +21,7 @@ class ApiService {
     final h = <String, String>{
       'Accept': 'application/json',
       // 'Content-Type' set per-request because login uses form encoding
+      // Content-Type is set per-request (JSON, form, multipart, etc.)
     };
     if (withAuth && token != null && token.isNotEmpty) {
       h['Authorization'] = 'Bearer $token';
@@ -54,6 +56,10 @@ class ApiService {
   }
 
   /// Register with flexible body as Map (JSON) - matches UserCreate pydantic model
+    throw Exception('Login failed: ${res.statusCode} ${res.body}');
+  }
+
+  /// Register with flexible body as Map (JSON)
   Future<Map<String, dynamic>> register(Map<String, dynamic> body) async {
     final uri = Uri.parse('$baseUrl/auth/register');
     final headers = await _headers(withAuth: false);
@@ -72,6 +78,7 @@ class ApiService {
   /// Get current user profile (note: backend exposes GET /users/me)
   Future<Map<String, dynamic>> me() async {
     final uri = Uri.parse('$baseUrl/users/me'); // <-- fixed path
+    final uri = Uri.parse('$baseUrl/users/me');
     final res = await client.get(uri, headers: await _headers());
     if (res.statusCode == 200) {
       return jsonDecode(res.body) as Map<String, dynamic>;
@@ -134,6 +141,7 @@ class ApiService {
   }
 
   // ---------------- Appointments ----------------
+  //appoinment
 
   Future<Map<String, dynamic>> createAppointment(
     Map<String, dynamic> body,
@@ -224,6 +232,8 @@ class ApiService {
 
   // ---------------- Departments & Categories ----------------
 
+  // -Departments
+
   Future<List<dynamic>> getDepartments() async {
     final uri = Uri.parse('$baseUrl/departments');
     final res = await client.get(uri, headers: await _headers());
@@ -236,6 +246,7 @@ class ApiService {
   Future<List<dynamic>> getCategories() async {
     // backend doesn't have a dedicated /departments/categories in your code;
     // you can use /departments and map them to categories if needed.
+    // If backend has no dedicated categories route, reuse departments
     final uri = Uri.parse('$baseUrl/departments');
     final res = await client.get(uri, headers: await _headers());
     if (res.statusCode == 200) {
@@ -305,7 +316,153 @@ class ApiService {
     throw Exception('sendNotification failed: ${res.statusCode} ${res.body}');
   }
 
+  Future<String> uploadImage(String filePath) async {
+    final uri = Uri.parse('$baseUrl/uploads');
+    final file = File(filePath);
+    if (!await file.exists()) throw Exception('File not found: $filePath');
+
+    final request = http.MultipartRequest('POST', uri);
+    // attach auth header if exists
+    final headers = await _headers();
+    request.headers.addAll(headers);
+
+    final filename = file.uri.pathSegments.isNotEmpty
+        ? file.uri.pathSegments.last
+        : 'upload.jpg';
+    request.files.add(
+      await http.MultipartFile.fromPath('file', filePath, filename: filename),
+    );
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final body = jsonDecode(res.body);
+      // try common keys: url, file_url, data.url
+      if (body is Map<String, dynamic>) {
+        if (body.containsKey('url')) return body['url'] as String;
+        if (body.containsKey('file_url')) return body['file_url'] as String;
+        if (body.containsKey('data') &&
+            body['data'] is Map &&
+            body['data']['url'] != null) {
+          return body['data']['url'] as String;
+        }
+      }
+      // fallback: if server returns the URL as plain string
+      if (res.body.isNotEmpty) return res.body;
+      throw Exception('uploadImage: unexpected response: ${res.body}');
+    } else {
+      throw Exception('uploadImage failed: ${res.statusCode} ${res.body}');
+    }
+  }
+
+  /// Upload directly to Cloudinary (unsigned upload). Requires cloudName and uploadPreset.
+  /// Returns secure_url from Cloudinary.
+  Future<String> uploadImageToCloudinary(
+    String filePath, {
+    required String cloudName,
+    required String uploadPreset,
+  }) async {
+    final uri = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+    );
+    final file = File(filePath);
+    if (!await file.exists()) throw Exception('File not found: $filePath');
+
+    final request = http.MultipartRequest('POST', uri);
+
+    // Cloudinary requires 'upload_preset' for unsigned uploads
+    request.fields['upload_preset'] = uploadPreset;
+    final filename = file.uri.pathSegments.isNotEmpty
+        ? file.uri.pathSegments.last
+        : 'upload.jpg';
+    request.files.add(
+      await http.MultipartFile.fromPath('file', filePath, filename: filename),
+    );
+
+    final streamed = await request.send();
+    final res = await http.Response.fromStream(streamed);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (body.containsKey('secure_url')) {
+        return body['secure_url'] as String;
+      }
+      if (body.containsKey('url')) {
+        return body['url'] as String;
+      }
+      throw Exception(
+        'uploadImageToCloudinary: unexpected response: ${res.body}',
+      );
+    } else {
+      throw Exception(
+        'uploadImageToCloudinary failed: ${res.statusCode} ${res.body}',
+      );
+    }
+  }
+
+  Future<bool> updateProfile(Map<String, dynamic> fields) async {
+    final uri = Uri.parse('$baseUrl/users/me');
+    final headers = await _headers()
+      ..addAll({'Content-Type': 'application/json'});
+
+    final res = await client.put(
+      uri,
+      headers: headers,
+      body: jsonEncode(fields),
+    );
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return true;
+    }
+
+    // try to surface server error message
+    try {
+      final body = jsonDecode(res.body);
+      if (body is Map && body['detail'] != null) {
+        throw Exception(body['detail'].toString());
+      }
+    } catch (_) {}
+
+    throw Exception('updateProfile failed: ${res.statusCode} ${res.body}');
+  }
+
+  /// Update profile and return the updated user object (Map) if server returns it.
+  Future<Map<String, dynamic>?> updateProfileAndGetUser(
+    Map<String, dynamic> fields,
+  ) async {
+    final uri = Uri.parse('$baseUrl/users/me');
+    final headers = await _headers()
+      ..addAll({'Content-Type': 'application/json'});
+
+    final res = await client.put(
+      uri,
+      headers: headers,
+      body: jsonEncode(fields),
+    );
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      try {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // try to surface server error message
+    try {
+      final body = jsonDecode(res.body);
+      if (body is Map && body['detail'] != null) {
+        throw Exception(body['detail'].toString());
+      }
+    } catch (_) {}
+
+    throw Exception(
+      'updateProfileAndGetUser failed: ${res.statusCode} ${res.body}',
+    );
+  }
+
   void dispose() {
     client.close();
   }
-}
+

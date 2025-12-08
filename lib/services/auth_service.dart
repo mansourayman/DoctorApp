@@ -1,4 +1,6 @@
 // lib/services/auth_service.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'storage_service.dart';
 import 'api_service.dart';
 
@@ -7,6 +9,7 @@ class AuthService {
   final StorageService storage;
 
   AuthService({required this.api, required this.storage});
+
   Future<void> logout() async {
     await storage.removeToken();
   }
@@ -38,6 +41,9 @@ class AuthService {
 
   /// change password
   /// requires token present in storage
+  /// Change password by calling backend endpoint.
+  /// Assumes backend endpoint: POST {baseUrl}/auth/change-password
+  /// Returns true on success, otherwise throws an Exception with a helpful message.
   Future<bool> changePassword(
     String currentPassword,
     String newPassword,
@@ -56,5 +62,39 @@ class AuthService {
     // return res;
     // إذا كان الخادم يعيد Map ونتوقع 'success': true
     return res['success'] == true;
+    final token = await storage.getToken();
+    if (token == null) throw Exception('Not authenticated.');
+
+    final base = api.baseUrl;
+    // نُرسل current_password and new_password في الـ query string لأن السيرفر يطلبهما كـ query
+    final qUrl = Uri.parse(
+      '$base/auth/change-password'
+      '?current_password=${Uri.encodeComponent(currentPassword)}'
+      '&new_password=${Uri.encodeComponent(newPassword)}',
+    );
+
+    final resp = await http.post(
+      qUrl,
+      headers: {
+        'Authorization': 'Bearer $token',
+        // لا حاجة لـ Content-Type لأننا لا نرسل body هنا
+      },
+    );
+
+    if (resp.statusCode == 200 || resp.statusCode == 204) {
+      return true;
+    }
+
+    // حاول نفك الـ JSON error message لو موجود
+    try {
+      final body = jsonDecode(resp.body);
+      if (body is Map && body['detail'] != null) {
+        throw Exception(body['detail'].toString());
+      }
+    } catch (_) {}
+
+    throw Exception(
+      'Failed to change password: ${resp.statusCode} ${resp.body}',
+    );
   }
 }

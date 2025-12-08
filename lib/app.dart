@@ -6,6 +6,7 @@ import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'providers/auth_provider.dart';
 // شاشات التطبيق
+// Screens
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -21,10 +22,12 @@ import 'screens/profile/profile_screen.dart';
 import 'screens/doctors/doctors_list_screen.dart';
 import 'screens/appointments/my_appointments_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/appointments/appointment_details_screen.dart';
 import 'screens/doctors/doctors_list_screen.dart';
 import 'screens/departments/departments_list_screen.dart';
 import 'screens/notifications/notifications_screen.dart';
 import 'screens/filters/filters_screen.dart';
+import 'screens/chat/chats_screen.dart';
 
 class MyApp extends StatelessWidget {
   @override
@@ -60,23 +63,33 @@ class MyApp extends StatelessWidget {
                   '/register': (_) => RegisterScreen(),
                   '/forgot': (_) => ForgotPasswordScreen(),
                   '/home': (_) => HomeScreen(),
+
                   '/appointments': (_) =>
                       MyAppointmentsScreen(), // تأكد أن الملف موجود
+                  // Appointments
+                  '/appointments': (_) => MyAppointmentsScreen(),
                   '/book': (context) {
                     final args = ModalRoute.of(context)!.settings.arguments;
                     if (args is Map<String, dynamic>) {
                       return BookAppointmentScreen(doctor: args);
                     }
-
                     return Scaffold(
                       body: Center(child: Text('No doctor provided')),
                     );
                   },
+
+                  '/appointment-details': (context) {
+                    final ap =
+                        ModalRoute.of(context)!.settings.arguments as Map;
+                    return AppointmentDetailsScreen(appointment: ap);
+                  },
+
                   '/profile': (_) => ProfileScreen(),
                   '/doctors': (_) => DoctorsListScreen(),
                   '/departments': (_) => DepartmentsListScreen(),
                   '/notifications': (_) => NotificationsScreen(),
                   '/filters': (_) => FiltersScreen(),
+                  '/chat': (_) => Chats(),
                 },
 
                 initialRoute: '/',
