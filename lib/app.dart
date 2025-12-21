@@ -5,7 +5,7 @@ import 'services/storage_service.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'providers/auth_provider.dart';
-// شاشات التطبيق
+
 // Screens
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -17,11 +17,6 @@ import 'theme.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/appointments/book_appointment_screen.dart';
 import 'screens/appointments/my_appointments_screen.dart';
-import 'screens/appointments/my_appointments_screen.dart';
-import 'screens/profile/profile_screen.dart';
-import 'screens/doctors/doctors_list_screen.dart';
-import 'screens/appointments/my_appointments_screen.dart';
-import 'screens/profile/profile_screen.dart';
 import 'screens/appointments/appointment_details_screen.dart';
 import 'screens/doctors/doctors_list_screen.dart';
 import 'screens/departments/departments_list_screen.dart';
@@ -40,6 +35,7 @@ class MyApp extends StatelessWidget {
             home: Scaffold(body: Center(child: CircularProgressIndicator())),
           );
         }
+
         final storage = snap.data!;
         final api = ApiService(baseUrl: ApiConstants.baseUrl, storage: storage);
         final authService = AuthService(api: api, storage: storage);
@@ -56,6 +52,7 @@ class MyApp extends StatelessWidget {
                 title: 'Healthcare App',
                 theme: AppTheme.light,
                 debugShowCheckedModeBanner: false,
+
                 routes: {
                   '/': (_) => SplashScreen(),
                   '/onboarding': (_) => OnboardingScreen(),
@@ -64,10 +61,9 @@ class MyApp extends StatelessWidget {
                   '/forgot': (_) => ForgotPasswordScreen(),
                   '/home': (_) => HomeScreen(),
 
-                  '/appointments': (_) =>
-                      MyAppointmentsScreen(), // تأكد أن الملف موجود
                   // Appointments
                   '/appointments': (_) => MyAppointmentsScreen(),
+
                   '/book': (context) {
                     final args = ModalRoute.of(context)!.settings.arguments;
                     if (args is Map<String, dynamic>) {
@@ -80,7 +76,7 @@ class MyApp extends StatelessWidget {
 
                   '/appointment-details': (context) {
                     final ap =
-                        ModalRoute.of(context)!.settings.arguments as Map;
+                    ModalRoute.of(context)!.settings.arguments as Map;
                     return AppointmentDetailsScreen(appointment: ap);
                   },
 
