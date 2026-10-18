@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 
+
 class ReviewCard extends StatelessWidget {
   final String author;
   final String timeAgo;
   final double rating;
   final String comment;
+
+  const ReviewCard({
+
   ReviewCard({
     required this.author,
     required this.timeAgo,
@@ -56,4 +60,5 @@ class ReviewCard extends StatelessWidget {
       ),
     );
   }
+  })
 }
