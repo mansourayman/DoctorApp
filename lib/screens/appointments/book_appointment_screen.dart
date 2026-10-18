@@ -5,122 +5,141 @@ import '../../theme.dart';
 
 class BookAppointmentScreen extends StatefulWidget {
   final Map<String, dynamic> doctor;
-  BookAppointmentScreen({required this.doctor});
+
+  final String slotStartIso;
+  final String slotEndIso;
+
+  const BookAppointmentScreen({
+    super.key,
+    required this.doctor,
+    required this.slotStartIso,
+    required this.slotEndIso,
+  });
+
   @override
-  _BookAppointmentScreenState createState() => _BookAppointmentScreenState();
+  State<BookAppointmentScreen> createState() => _BookAppointmentScreenState();
 }
 
 class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
-  DateTime? _date;
-  TimeOfDay? _time;
   bool loading = false;
 
-  Future<void> _pickDate() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(Duration(days: 365)),
-    );
-    if (d != null) setState(() => _date = d);
-  }
+  DateTime? get _start => DateTime.tryParse(widget.slotStartIso);
+  DateTime? get _end => DateTime.tryParse(widget.slotEndIso);
 
-  Future<void> _pickTime() async {
-    final t = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: 10, minute: 0),
-    );
-    if (t != null) setState(() => _time = t);
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _fmtTime(DateTime d) {
+    final local = d.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 
   Future<void> _book() async {
-    if (_date == null || _time == null) {
+    final start = _start;
+    final end = _end;
+
+    if (start == null || end == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('اختر التاريخ والوقت')));
+      ).showSnackBar(const SnackBar(content: Text('Slot غير صالح')));
       return;
     }
-    setState(() => loading = true);
-    final start = DateTime(
-      _date!.year,
-      _date!.month,
-      _date!.day,
-      _time!.hour,
-      _time!.minute,
-    );
-    final end = start.add(Duration(minutes: 30));
-    final auth = Provider.of<AuthProvider>(context, listen: false);
-    try {
-      await auth.authService.api.createAppointment({
-        'doctor_id': widget.doctor['id'],
-        'start_datetime': start.toUtc().toIso8601String(),
-        'end_datetime': end.toUtc().toIso8601String(),
-      });
+
+    final rawId = widget.doctor['id'] ?? widget.doctor['doctor_id'];
+    final doctorId = rawId is int ? rawId : int.tryParse('$rawId');
+    if (doctorId == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('تم إرسال طلب الحجز')));
-      Navigator.pop(context);
+      ).showSnackBar(const SnackBar(content: Text('Doctor ID غير صالح')));
+      return;
+    }
+
+    setState(() => loading = true);
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    try {
+      await auth.authService.api.createAppointment({
+        'doctor_id': doctorId,
+
+        'start_datetime': widget.slotStartIso,
+        'end_datetime': widget.slotEndIso,
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم إرسال طلب الحجز')));
+
+      Navigator.pop(context, true);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('فشل الحجز: $e')));
     } finally {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final name = widget.doctor['user']?['full_name'] ?? 'Doctor';
+    final start = _start;
+    final end = _end;
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      appBar: AppBar(title: Text('Book Appointment')),
+      appBar: AppBar(title: Text('Confirm Booking - $name')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             Card(
               child: ListTile(
-                title: Text(
-                  'Choose Appointment Date',
+                title: const Text(
+                  'Appointment Date',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(
-                  _date == null
-                      ? 'No date'
-                      : '${_date!.year}-${_date!.month}-${_date!.day}',
-                ),
+                subtitle: Text(start == null ? '-' : _fmtDate(start)),
                 trailing: Icon(Icons.calendar_today, color: AppTheme.primary),
-                onTap: _pickDate,
               ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Card(
               child: ListTile(
-                title: Text(
-                  'Choose Time',
+                title: const Text(
+                  'Time',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
-                  _time == null ? 'No time' : _time!.format(context),
+                  (start == null || end == null)
+                      ? '-'
+                      : '${_fmtTime(start)} - ${_fmtTime(end)}',
                 ),
                 trailing: Icon(Icons.access_time, color: AppTheme.primary),
-                onTap: _pickTime,
               ),
             ),
-            Spacer(),
-            loading
-                ? CircularProgressIndicator()
-                : SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _book,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Confirm'),
-                      ),
-                    ),
-                  ),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: loading ? null : _book,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: loading
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Confirm'),
+                ),
+              ),
+            ),
           ],
         ),
       ),

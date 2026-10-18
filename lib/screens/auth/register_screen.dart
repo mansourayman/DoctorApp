@@ -3,14 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
 import '../../providers/auth_provider.dart';
-import '../../theme.dart'; // optional: keep your theme constants
+import '../../theme.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
 
   @override
-  _RegisterScreenState createState() => _RegisterScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends State<RegisterScreen>
@@ -27,8 +28,8 @@ class _RegisterScreenState extends State<RegisterScreen>
   bool _showVerify = false;
   bool _agree = false;
   double _strength = 0.0;
-  File? _pickedImage;
 
+  File? _pickedImage;
   final _picker = ImagePicker();
 
   @override
@@ -36,7 +37,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     super.initState();
     _passCtl.addListener(() {
       final s = _passwordStrength(_passCtl.text);
-      setState(() => _strength = s);
+      if (mounted) setState(() => _strength = s);
     });
   }
 
@@ -50,17 +51,14 @@ class _RegisterScreenState extends State<RegisterScreen>
     super.dispose();
   }
 
-  // pick avatar (optional)
   Future<void> _pickAvatar() async {
     try {
       final x = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1200,
       );
-      if (x != null) setState(() => _pickedImage = File(x.path));
-    } catch (e) {
-      // ignore or show snackbar
-    }
+      if (x != null && mounted) setState(() => _pickedImage = File(x.path));
+    } catch (_) {}
   }
 
   double _passwordStrength(String pwd) {
@@ -99,30 +97,38 @@ class _RegisterScreenState extends State<RegisterScreen>
 
     setState(() => _loading = true);
     final auth = Provider.of<AuthProvider>(context, listen: false);
+
+    final fullName = _usernameCtl.text.trim();
+    final email = _emailCtl.text.trim();
+    final phone = _phoneCtl.text.trim();
+    final password = _passCtl.text.trim();
+    final avatarPath = _pickedImage?.path;
+
     try {
-      await auth.register(
-        _usernameCtl.text.trim(),
-        _emailCtl.text.trim(),
-        _phoneCtl.text.trim(),
-        _passCtl.text.trim(),
+      await auth.startRegisterRequestOtp(email: email);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('OTP sent, check your email')),
       );
 
-      // optionally upload avatar after register
-      if (_pickedImage != null) {
-        await auth.uploadAvatarAndUpdate(_pickedImage!.path);
-      }
-
+      Navigator.pushReplacementNamed(
+        context,
+        '/otp',
+        arguments: {
+          'email': email,
+          'fullName': fullName,
+          'phone': phone,
+          'password': password,
+          'avatarPath': avatarPath,
+        },
+      );
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Registration successful')));
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Register failed: ${e.toString()}')),
-        );
-      }
+      ).showSnackBar(SnackBar(content: Text('Failed to send OTP: $e')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -136,7 +142,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // background gradient
           Positioned.fill(
             child: Container(
               decoration: const BoxDecoration(
@@ -148,7 +153,6 @@ class _RegisterScreenState extends State<RegisterScreen>
               ),
             ),
           ),
-
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -171,12 +175,11 @@ class _RegisterScreenState extends State<RegisterScreen>
                       ),
                       child: Column(
                         children: [
-                          // header with avatar and title
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               GestureDetector(
-                                onTap: _pickAvatar,
+                                onTap: _loading ? null : _pickAvatar,
                                 child: Container(
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
@@ -186,7 +189,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                         Color(0xFF0072FF),
                                       ],
                                     ),
-                                    boxShadow: [
+                                    boxShadow: const [
                                       BoxShadow(
                                         color: Colors.black12,
                                         blurRadius: 8,
@@ -231,10 +234,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                               ),
                             ],
                           ),
-
                           const SizedBox(height: 18),
-
-                          // form fields
                           Form(
                             key: _form,
                             child: Column(
@@ -244,7 +244,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   hint: 'Full name',
                                   icon: Icons.person_outline,
                                   validator: (s) =>
-                                      s == null || s.trim().isEmpty
+                                      (s == null || s.trim().isEmpty)
                                       ? 'Required'
                                       : null,
                                 ),
@@ -255,11 +255,13 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   icon: Icons.email_outlined,
                                   keyboardType: TextInputType.emailAddress,
                                   validator: (s) {
-                                    if (s == null || s.trim().isEmpty)
+                                    if (s == null || s.trim().isEmpty) {
                                       return 'Required';
+                                    }
                                     final re = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-                                    if (!re.hasMatch(s.trim()))
+                                    if (!re.hasMatch(s.trim())) {
                                       return 'Invalid email';
+                                    }
                                     return null;
                                   },
                                 ),
@@ -271,7 +273,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   keyboardType: TextInputType.phone,
                                 ),
                                 const SizedBox(height: 12),
-                                // password + strength
+
                                 _buildField(
                                   controller: _passCtl,
                                   hint: 'Password',
@@ -283,17 +285,21 @@ class _RegisterScreenState extends State<RegisterScreen>
                                           ? Icons.visibility
                                           : Icons.visibility_off,
                                     ),
-                                    onPressed: () =>
-                                        setState(() => _showPass = !_showPass),
+                                    onPressed: _loading
+                                        ? null
+                                        : () => setState(
+                                            () => _showPass = !_showPass,
+                                          ),
                                   ),
                                   validator: (s) {
-                                    if (s == null || s.length < 8)
+                                    if (s == null || s.length < 8) {
                                       return 'Min 8 chars';
+                                    }
                                     return null;
                                   },
                                 ),
+
                                 const SizedBox(height: 8),
-                                // strength bar
                                 Row(
                                   children: [
                                     Expanded(
@@ -328,7 +334,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                                     ),
                                   ],
                                 ),
+
                                 const SizedBox(height: 12),
+
                                 _buildField(
                                   controller: _verifyCtl,
                                   hint: 'Confirm password',
@@ -340,30 +348,42 @@ class _RegisterScreenState extends State<RegisterScreen>
                                           ? Icons.visibility
                                           : Icons.visibility_off,
                                     ),
-                                    onPressed: () => setState(
-                                      () => _showVerify = !_showVerify,
-                                    ),
+                                    onPressed: _loading
+                                        ? null
+                                        : () => setState(
+                                            () => _showVerify = !_showVerify,
+                                          ),
                                   ),
                                   validator: (s) {
-                                    if (s == null || s.isEmpty)
+                                    if (s == null || s.isEmpty) {
                                       return 'Required';
-                                    if (s != _passCtl.text)
+                                    }
+                                    if (s != _passCtl.text) {
                                       return 'Confirm does not match';
+                                    }
                                     return null;
                                   },
                                 ),
+
                                 const SizedBox(height: 14),
+
                                 Row(
                                   children: [
                                     Checkbox(
                                       value: _agree,
-                                      onChanged: (v) =>
-                                          setState(() => _agree = v ?? false),
+                                      onChanged: _loading
+                                          ? null
+                                          : (v) => setState(
+                                              () => _agree = v ?? false,
+                                            ),
                                     ),
                                     Expanded(
                                       child: GestureDetector(
-                                        onTap: () =>
-                                            setState(() => _agree = !_agree),
+                                        onTap: _loading
+                                            ? null
+                                            : () => setState(
+                                                () => _agree = !_agree,
+                                              ),
                                         child: RichText(
                                           text: TextSpan(
                                             style: GoogleFonts.poppins(
@@ -389,9 +409,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                                     ),
                                   ],
                                 ),
+
                                 const SizedBox(height: 8),
 
-                                // action buttons: signup + social
                                 SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
@@ -422,59 +442,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                                           ),
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () {}, // implement google
-                                        icon: Image.asset(
-                                          r'assets\images\google_logo.png',
-                                          width: 18,
-                                          height: 18,
-                                          errorBuilder: (_, __, ___) =>
-                                              Icon(Icons.g_mobiledata),
-                                        ),
-                                        label: const FittedBox(
-                                          child: Text('Continue with Google'),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () {}, // implement apple
-                                        icon: const Icon(Icons.apple, size: 18),
-                                        label: const FittedBox(
-                                          child: Text('Continue with Apple'),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
 
                                 const SizedBox(height: 12),
+
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -485,10 +455,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                                       ),
                                     ),
                                     TextButton(
-                                      onPressed: () => Navigator.pushNamed(
-                                        context,
-                                        '/login',
-                                      ),
+                                      onPressed: _loading
+                                          ? null
+                                          : () => Navigator.pushNamed(
+                                              context,
+                                              '/login',
+                                            ),
                                       child: Text(
                                         'Sign in',
                                         style: GoogleFonts.poppins(

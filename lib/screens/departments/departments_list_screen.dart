@@ -26,7 +26,7 @@ class _DepartmentsListScreenState extends State<DepartmentsListScreen> {
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final api = auth.authService.api;
-      // ADAPT: ensure ApiService has getDepartments()
+
       final data = await api.getDepartments();
       if (mounted) setState(() => _departments = data);
     } catch (e) {

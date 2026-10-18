@@ -26,7 +26,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final api = auth.authService.api;
-      // ADAPT: ensure ApiService has getNotifications()
+
       final data = await api.getNotifications();
       if (mounted) setState(() => _notes = data);
     } catch (e) {
@@ -44,7 +44,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final api = auth.authService.api;
-      // ADAPT: ensure ApiService has markNotificationRead(id)
+
       await api.markNotificationRead(id);
       await _fetch();
     } catch (e) {
@@ -92,9 +92,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               onPressed: () => _markRead(n),
                               child: Text('Mark read'),
                             ),
-                      onTap: () {
-                        // navigate to detail if exists
-                      },
+                      onTap: () {},
                     ),
                   );
                 },

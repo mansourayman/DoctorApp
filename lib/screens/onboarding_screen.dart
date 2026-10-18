@@ -1,4 +1,3 @@
-// lib/screens/onboarding_screen.dart
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
@@ -64,7 +63,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          /// 🔹 الخلفية
           Positioned.fill(
             child: Image.asset(
               'assets/images/backGround.png',
@@ -72,16 +70,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
 
-          /// 🔹 طبقة شفافة خفيفة لتنعيم الألوان
           Positioned.fill(
             child: Container(color: Colors.black.withOpacity(0.05)),
           ),
 
-          /// 🔹 المحتوى الأصلي
           SafeArea(
             child: Column(
               children: [
-                // top controls (skip)
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18.0,
@@ -99,7 +94,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             vertical: 6,
                           ),
                           child: Text(
-                            'تخطي',
+                            'Skip',
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
@@ -111,7 +106,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
 
-                // PageView
                 Expanded(
                   child: PageView.builder(
                     controller: _pc,
@@ -141,7 +135,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // image container
                                 Container(
                                   width: imageSize,
                                   height: imageSize,
@@ -175,7 +168,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 26),
-                                // title
+
                                 AnimatedSwitcher(
                                   duration: const Duration(milliseconds: 300),
                                   child: Text(
@@ -190,7 +183,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 10),
-                                // subtitle
+
                                 Text(
                                   p.subtitle,
                                   textAlign: TextAlign.center,
@@ -223,7 +216,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
 
-                // indicator + buttons
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20.0,
@@ -231,7 +223,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   child: Column(
                     children: [
-                      // indicators
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(pages.length, (idx) {
@@ -252,7 +243,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       ),
                       const SizedBox(height: 14),
 
-                      // action buttons
                       Row(
                         children: [
                           SizedBox(

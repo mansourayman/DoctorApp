@@ -1,227 +1,375 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
-class AppointmentDetailsScreen extends StatelessWidget {
-  final Map appointment;
+import '../../providers/auth_provider.dart';
+import '../../theme.dart';
 
-  const AppointmentDetailsScreen({super.key, required this.appointment});
+class AppointmentDetailScreen extends StatefulWidget {
+  final int appointmentId;
+  const AppointmentDetailScreen({super.key, required this.appointmentId});
+
+  @override
+  State<AppointmentDetailScreen> createState() =>
+      _AppointmentDetailScreenState();
+}
+
+class _AppointmentDetailScreenState extends State<AppointmentDetailScreen> {
+  bool loading = true;
+  bool actionLoading = false;
+  String? error;
+
+  Map<String, dynamic>? appt;
+
+  int rating = 5;
+  final commentCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _load(),
+    ); // is important beacuse if the context not ready or mediaQuery
+  }
+
+  @override
+  void dispose() {
+    commentCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final api = auth.authService.api;
+
+      final res = await api.getAppointmentDetails(widget.appointmentId);
+
+      if (!mounted) return;
+      setState(() {
+        appt = Map<String, dynamic>.from(res);
+        loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = e.toString();
+      });
+    }
+  }
+
+  String _fmtDateTime(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '-';
+    final l = dt.toLocal();
+    return '${l.year}-${l.month.toString().padLeft(2, '0')}-${l.day.toString().padLeft(2, '0')}  '
+        '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _cancel() async {
+    if (appt == null) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cancel appointment?'),
+        content: const Text('This will cancel your appointment.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Yes, cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    setState(() => actionLoading = true);
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final api = auth.authService.api;
+
+      await api.cancelAppointment(widget.appointmentId);
+
+      if (!mounted) return;
+      await _load();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Appointment cancelled')));
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Cancel failed: $e')));
+    } finally {
+      if (mounted) setState(() => actionLoading = false);
+    }
+  }
+
+  Future<void> _submitReview() async {
+    if (appt == null) return;
+
+    setState(() => actionLoading = true);
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final api = auth.authService.api;
+
+      await api.createReview({
+        'appointment_id': widget.appointmentId,
+        'rating': rating,
+        'comment': commentCtrl.text.trim(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Review submitted')));
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Review failed: $e')));
+    } finally {
+      if (mounted) setState(() => actionLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final doctor = appointment["doctor"]["user"];
-    final spec = appointment["doctor"]["specialization"];
-    final dep = appointment["department"];
-    final startDT = DateTime.parse(appointment["start_datetime"]);
+    if (loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Appointment Details')),
+        body: Center(child: Text('Error: $error')),
+      );
+    }
 
-    String date =
-        "${startDT.day.toString().padLeft(2, '0')} "
-        "${_monthName(startDT.month)} "
-        "${startDT.year}";
+    final a = appt ?? {};
+    final status = (a['status'] ?? '').toString();
 
-    String time =
-        "${(startDT.hour % 12 == 0 ? 12 : startDT.hour % 12).toString().padLeft(2, '0')}:"
-        "${startDT.minute.toString().padLeft(2, '0')} "
-        "${startDT.hour >= 12 ? "PM" : "AM"}";
+    final doctorName = a['doctor']?['user']?['full_name'] ?? 'Doctor';
+    final spec = a['doctor']?['specialization'] ?? 'Specialist';
+
+    final startIso = (a['start_datetime'] ?? '').toString();
+    final endIso = (a['end_datetime'] ?? '').toString();
+
+    final reason = (a['reason'] ?? '').toString();
+
+    final canCancel = status == 'pending' || status == 'confirmed';
+    final canReview = status == 'completed';
 
     return Scaffold(
-      backgroundColor: const Color(0xfff8f8f8),
+      backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text("Details Appointment"),
-        elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        title: Text(
+          'Appointment Details',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+        ),
+        actions: [
+          IconButton(
+            onPressed: actionLoading ? null : _load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
-
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // -------- Card -----------
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12.withOpacity(0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  doctorName.toString(),
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
                   ),
-                ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  spec.toString(),
+                  style: GoogleFonts.poppins(
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _row('Status', status),
+                const SizedBox(height: 6),
+                _row('Start', _fmtDateTime(startIso)),
+                const SizedBox(height: 6),
+                _row('End', _fmtDateTime(endIso)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Reason',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  reason.isEmpty ? '—' : reason,
+                  style: GoogleFonts.poppins(color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          if (canCancel)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: actionLoading ? null : _cancel,
+                icon: const Icon(Icons.cancel),
+                label: Text(
+                  'Cancel Appointment',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
               ),
+            ),
+
+          if (canReview) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Leave a Review',
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _card(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Details Appointment",
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-
-                  _detailItem(
-                    title: date,
-                    subtitle: "Appointment Date",
-                    icon: Icons.calendar_month,
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  _detailItem(
-                    title: time,
-                    subtitle: "Appointment Time",
-                    icon: Icons.access_time,
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  _detailItem(
-                    title: dep != null ? dep["name"] : "Unknown Hospital",
-                    subtitle: "Appointment Location",
-                    icon: Icons.location_city,
-                  ),
-
-                  const SizedBox(height: 18),
-
-                  // Doctor card
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xfff4f4f4),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 27,
-                          backgroundImage: doctor["avatar_url"] != null
-                              ? NetworkImage(doctor["avatar_url"])
-                              : const AssetImage("assets/images/doctor.png")
-                                    as ImageProvider,
-                        ),
-
-                        const SizedBox(width: 14),
-
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                doctor["full_name"],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                spec ?? "Specialist",
-                                style: TextStyle(
-                                  color: Colors.grey[700],
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
+                  DropdownButton<int>(
+                    value: rating,
+                    onChanged: actionLoading
+                        ? null
+                        : (v) {
+                            if (v == null) return;
+                            setState(() => rating = v);
+                          },
+                    items: [1, 2, 3, 4, 5]
+                        .map(
+                          (r) => DropdownMenuItem(
+                            value: r,
+                            child: Text('$r Stars'),
                           ),
-                        ),
-
-                        const Icon(
-                          Icons.verified,
-                          color: Colors.teal,
-                          size: 22,
-                        ),
-                      ],
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: commentCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      hintText: 'Write your comment...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: actionLoading ? null : _submitReview,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: actionLoading
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                'Submit Review',
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 30),
-
-            // ---------------- Buttons ----------------
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _btn("Edit", Colors.grey.shade300, Colors.black),
-                _btn("Verify", const Color(0xff4c9aff), Colors.white),
-              ],
-            ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  // ------- Small widgets ---------
+  Widget _card({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
 
-  Widget _detailItem({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-  }) {
+  Widget _row(String k, String v) {
     return Row(
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-            ],
+        SizedBox(
+          width: 70,
+          child: Text(
+            k,
+            style: GoogleFonts.poppins(
+              fontWeight: FontWeight.w800,
+              color: Colors.black54,
+            ),
           ),
         ),
-        Icon(icon, color: Colors.grey[700], size: 22),
+        Expanded(
+          child: Text(
+            v,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+          ),
+        ),
       ],
     );
-  }
-
-  Widget _btn(String text, Color bg, Color fg) {
-    return Container(
-      width: 130,
-      height: 44,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            color: fg,
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _monthName(int m) {
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-    return months[m - 1];
   }
 }

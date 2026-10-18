@@ -1,4 +1,3 @@
-// lib/services/api_service.dart
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -14,24 +13,17 @@ class ApiService {
     required this.storage,
     http.Client? client,
   }) : client = client ?? http.Client();
-
-  /// Build headers. Use withAuth: false for endpoints like login/register.
+  //here we prepare header to send with auth ->for some endpoint need that
   Future<Map<String, String>> _headers({bool withAuth = true}) async {
     final token = await storage.getToken();
-    final h = <String, String>{
-      'Accept': 'application/json',
-      // Content-Type is set per-request (JSON, form, multipart, etc.)
-    };
+    final h = <String, String>{'Accept': 'application/json'};
     if (withAuth && token != null && token.isNotEmpty) {
       h['Authorization'] = 'Bearer $token';
     }
     return h;
   }
 
-  // ---------------- Auth ----------------
-
-  /// Login (the backend expects OAuth2 form -> application/x-www-form-urlencoded)
-  /// identifier: can be email or phone (backend accepts both via username)
+  //make login as store token
   Future<Map<String, dynamic>> login(String identifier, String password) async {
     final uri = Uri.parse('$baseUrl/auth/token');
     final headers = <String, String>{
@@ -51,23 +43,24 @@ class ApiService {
     throw Exception('Login failed: ${res.statusCode} ${res.body}');
   }
 
-  /// Register with flexible body as Map (JSON)
   Future<Map<String, dynamic>> register(Map<String, dynamic> body) async {
     final uri = Uri.parse('$baseUrl/auth/register');
     final headers = await _headers(withAuth: false);
     headers['Content-Type'] = 'application/json';
+
     final res = await client.post(
       uri,
       headers: headers,
       body: jsonEncode(body),
     );
+
     if (res.statusCode == 200 || res.statusCode == 201) {
       return jsonDecode(res.body) as Map<String, dynamic>;
     }
+
     throw Exception('Register failed: ${res.statusCode} ${res.body}');
   }
 
-  /// Get current user profile (note: backend exposes GET /users/me)
   Future<Map<String, dynamic>> me() async {
     final uri = Uri.parse('$baseUrl/users/me');
     final res = await client.get(uri, headers: await _headers());
@@ -106,59 +99,18 @@ class ApiService {
     }
     throw Exception('getDoctors failed: ${res.statusCode} ${res.body}');
   }
-  //appoinment
 
-  Future<Map<String, dynamic>> createAppointment(
-    Map<String, dynamic> body,
-  ) async {
-    final uri = Uri.parse('$baseUrl/appointments');
-    final res = await client.post(
-      uri,
-      headers: await _headers()
-        ..addAll({'Content-Type': 'application/json'}),
-      body: jsonEncode(body),
-    );
-    if (res.statusCode == 201 || res.statusCode == 200) {
-      return jsonDecode(res.body) as Map<String, dynamic>;
-    }
-    throw Exception('createAppointment failed: ${res.statusCode} ${res.body}');
-  }
+  Future<List<dynamic>> getTopRatedDoctors({int limit = 10}) async {
+    final uri = Uri.parse(
+      '$baseUrl/doctors/top-rated',
+    ).replace(queryParameters: {'limit': limit.toString()});
 
-  Future<List<dynamic>> getMyAppointments() async {
-    final uri = Uri.parse('$baseUrl/appointments/my-appointments');
-    final res = await client.get(uri, headers: await _headers());
+    final res = await client.get(uri, headers: await _headers(withAuth: false));
+
     if (res.statusCode == 200) {
       return jsonDecode(res.body) as List<dynamic>;
     }
-    throw Exception('getMyAppointments failed: ${res.statusCode} ${res.body}');
-  }
-
-  Future<void> cancelAppointment(dynamic id) async {
-    final uri = Uri.parse('$baseUrl/appointments/$id/cancel');
-    final res = await client.post(uri, headers: await _headers());
-    if (res.statusCode == 200 || res.statusCode == 204) return;
-    throw Exception('cancelAppointment failed: ${res.statusCode} ${res.body}');
-  }
-
-  // -Departments
-
-  Future<List<dynamic>> getDepartments() async {
-    final uri = Uri.parse('$baseUrl/departments');
-    final res = await client.get(uri, headers: await _headers());
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body) as List<dynamic>;
-    }
-    throw Exception('getDepartments failed: ${res.statusCode} ${res.body}');
-  }
-
-  Future<List<dynamic>> getCategories() async {
-    // If backend has no dedicated categories route, reuse departments
-    final uri = Uri.parse('$baseUrl/departments');
-    final res = await client.get(uri, headers: await _headers());
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body) as List<dynamic>;
-    }
-    throw Exception('getCategories failed: ${res.statusCode} ${res.body}');
+    throw Exception('getTopRatedDoctors failed: ${res.statusCode} ${res.body}');
   }
 
   Future<Map<String, dynamic>> getDoctorById(int id) async {
@@ -181,7 +133,130 @@ class ApiService {
     throw Exception('getDoctorSchedule failed: ${res.statusCode} ${res.body}');
   }
 
-  // ---------------- Notifications ----------------
+  Future<Map<String, dynamic>> createAppointment(
+    Map<String, dynamic> body,
+  ) async {
+    final uri = Uri.parse('$baseUrl/appointments/');
+
+    final res = await client.post(
+      uri,
+      headers: await _headers()
+        ..addAll({'Content-Type': 'application/json'}),
+      body: jsonEncode(body),
+    );
+
+    if (res.statusCode == 201 || res.statusCode == 200) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+
+    throw Exception(
+      'createAppointment failed: ${res.statusCode} ${res.body} | sent=$body',
+    );
+  }
+
+  Future<List<dynamic>> getMyAppointments() async {
+    final uri = Uri.parse('$baseUrl/appointments/my-appointments');
+    final res = await client.get(uri, headers: await _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('getMyAppointments failed: ${res.statusCode} ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getAppointmentDetails(int id) async {
+    try {
+      final uri = Uri.parse('$baseUrl/appointments/$id');
+      final res = await client.get(uri, headers: await _headers());
+
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+
+      if (res.statusCode != 404) {
+        throw Exception(
+          'getAppointmentDetails failed: ${res.statusCode} ${res.body}',
+        );
+      }
+    } catch (_) {}
+
+    final list = await getMyAppointments();
+    final items = List<Map<String, dynamic>>.from(list);
+
+    final match = items.where((e) {
+      final x = e['id'];
+      final aid = (x is int) ? x : int.tryParse('$x');
+      return aid == id;
+    }).toList();
+
+    if (match.isEmpty) {
+      throw Exception('Appointment not found in my-appointments');
+    }
+
+    return match.first;
+  }
+
+  Future<void> cancelAppointment(dynamic id) async {
+    final uri = Uri.parse('$baseUrl/appointments/$id/cancel');
+
+    final res = await client.delete(uri, headers: await _headers());
+
+    if (res.statusCode == 200 || res.statusCode == 204) return;
+
+    throw Exception('cancelAppointment failed: ${res.statusCode} ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> createReview(Map<String, dynamic> body) async {
+    final uri = Uri.parse('$baseUrl/reviews/');
+
+    final res = await client.post(
+      uri,
+      headers: await _headers()
+        ..addAll({'Content-Type': 'application/json'}),
+      body: jsonEncode(body),
+    );
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    }
+
+    throw Exception('createReview failed: ${res.statusCode} ${res.body}');
+  }
+
+  Future<List<dynamic>> getDepartments() async {
+    final uri = Uri.parse('$baseUrl/departments');
+    final res = await client.get(uri, headers: await _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('getDepartments failed: ${res.statusCode} ${res.body}');
+  }
+
+  Future<List<dynamic>> getCategories() async {
+    final uri = Uri.parse('$baseUrl/departments');
+    final res = await client.get(uri, headers: await _headers());
+    if (res.statusCode == 200) {
+      return jsonDecode(res.body) as List<dynamic>;
+    }
+    throw Exception('getCategories failed: ${res.statusCode} ${res.body}');
+  }
+
+  Future<List<Map<String, dynamic>>> getDepartmentsCategories() async {
+    final uri = Uri.parse('$baseUrl/departments/categories');
+
+    final res = await client.get(uri, headers: await _headers(withAuth: false));
+
+    if (res.statusCode == 200) {
+      final decoded = jsonDecode(res.body);
+      if (decoded is List) {
+        return decoded.cast<Map<String, dynamic>>();
+      }
+      throw Exception('Invalid departments/categories response: ${res.body}');
+    }
+
+    throw Exception(
+      'getDepartmentsCategories failed: ${res.statusCode} ${res.body}',
+    );
+  }
 
   Future<List<dynamic>> getNotifications() async {
     final uri = Uri.parse('$baseUrl/notifications/my-notifications');
@@ -228,13 +303,12 @@ class ApiService {
     if (!await file.exists()) throw Exception('File not found: $filePath');
 
     final request = http.MultipartRequest('POST', uri);
-    // attach auth header if exists
-    final headers = await _headers();
-    request.headers.addAll(headers);
+    request.headers.addAll(await _headers());
 
     final filename = file.uri.pathSegments.isNotEmpty
         ? file.uri.pathSegments.last
         : 'upload.jpg';
+
     request.files.add(
       await http.MultipartFile.fromPath('file', filePath, filename: filename),
     );
@@ -244,7 +318,7 @@ class ApiService {
 
     if (res.statusCode == 200 || res.statusCode == 201) {
       final body = jsonDecode(res.body);
-      // try common keys: url, file_url, data.url
+
       if (body is Map<String, dynamic>) {
         if (body.containsKey('url')) return body['url'] as String;
         if (body.containsKey('file_url')) return body['file_url'] as String;
@@ -254,7 +328,6 @@ class ApiService {
           return body['data']['url'] as String;
         }
       }
-      // fallback: if server returns the URL as plain string
       if (res.body.isNotEmpty) return res.body;
       throw Exception('uploadImage: unexpected response: ${res.body}');
     } else {
@@ -262,8 +335,6 @@ class ApiService {
     }
   }
 
-  /// Upload directly to Cloudinary (unsigned upload). Requires cloudName and uploadPreset.
-  /// Returns secure_url from Cloudinary.
   Future<String> uploadImageToCloudinary(
     String filePath, {
     required String cloudName,
@@ -276,12 +347,12 @@ class ApiService {
     if (!await file.exists()) throw Exception('File not found: $filePath');
 
     final request = http.MultipartRequest('POST', uri);
-
-    // Cloudinary requires 'upload_preset' for unsigned uploads
     request.fields['upload_preset'] = uploadPreset;
+
     final filename = file.uri.pathSegments.isNotEmpty
         ? file.uri.pathSegments.last
         : 'upload.jpg';
+
     request.files.add(
       await http.MultipartFile.fromPath('file', filePath, filename: filename),
     );
@@ -291,12 +362,8 @@ class ApiService {
 
     if (res.statusCode == 200 || res.statusCode == 201) {
       final body = jsonDecode(res.body) as Map<String, dynamic>;
-      if (body.containsKey('secure_url')) {
-        return body['secure_url'] as String;
-      }
-      if (body.containsKey('url')) {
-        return body['url'] as String;
-      }
+      if (body.containsKey('secure_url')) return body['secure_url'] as String;
+      if (body.containsKey('url')) return body['url'] as String;
       throw Exception(
         'uploadImageToCloudinary: unexpected response: ${res.body}',
       );
@@ -305,6 +372,28 @@ class ApiService {
         'uploadImageToCloudinary failed: ${res.statusCode} ${res.body}',
       );
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getAvailableSlots({
+    required int doctorId,
+    required DateTime date,
+  }) async {
+    final yyyy = date.year.toString().padLeft(4, '0');
+    final mm = date.month.toString().padLeft(2, '0');
+    final dd = date.day.toString().padLeft(2, '0');
+    final dateStr = '$yyyy-$mm-$dd';
+
+    final uri = Uri.parse(
+      '$baseUrl/doctors/$doctorId/available-slots',
+    ).replace(queryParameters: {'date_': dateStr});
+
+    final res = await client.get(uri, headers: await _headers());
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body) as List;
+      return data.map((e) => e as Map<String, dynamic>).toList();
+    }
+    throw Exception('getAvailableSlots failed: ${res.statusCode} ${res.body}');
   }
 
   Future<bool> updateProfile(Map<String, dynamic> fields) async {
@@ -322,7 +411,6 @@ class ApiService {
       return true;
     }
 
-    // try to surface server error message
     try {
       final body = jsonDecode(res.body);
       if (body is Map && body['detail'] != null) {
@@ -333,7 +421,6 @@ class ApiService {
     throw Exception('updateProfile failed: ${res.statusCode} ${res.body}');
   }
 
-  /// Update profile and return the updated user object (Map) if server returns it.
   Future<Map<String, dynamic>?> updateProfileAndGetUser(
     Map<String, dynamic> fields,
   ) async {
@@ -355,7 +442,6 @@ class ApiService {
       }
     }
 
-    // try to surface server error message
     try {
       final body = jsonDecode(res.body);
       if (body is Map && body['detail'] != null) {
@@ -366,6 +452,57 @@ class ApiService {
     throw Exception(
       'updateProfileAndGetUser failed: ${res.statusCode} ${res.body}',
     );
+  }
+
+  Future<Map<String, dynamic>> requestOtp({
+    required String email,
+    String purpose = 'register',
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/request-otp');
+    final payload = {'email': email, 'purpose': purpose};
+
+    final res = await client.post(
+      uri,
+      headers: await _headers(withAuth: false)
+        ..addAll({'Content-Type': 'application/json'}),
+      body: jsonEncode(payload),
+    );
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      try {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {
+        return {'message': res.body};
+      }
+    }
+
+    throw Exception('requestOtp failed: ${res.statusCode} ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> verifyOtp({
+    required String email,
+    required String code,
+    String purpose = 'register',
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/verify-otp');
+    final payload = {'email': email, 'purpose': purpose, 'code': code};
+
+    final res = await client.post(
+      uri,
+      headers: await _headers(withAuth: false)
+        ..addAll({'Content-Type': 'application/json'}),
+      body: jsonEncode(payload),
+    );
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      try {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {
+        return {'message': res.body};
+      }
+    }
+
+    throw Exception('verifyOtp failed: ${res.statusCode} ${res.body}');
   }
 
   void dispose() {

@@ -1,4 +1,3 @@
-// lib/screens/home/home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme.dart';
 import '../doctors/doctor_detail_screen.dart';
+import '../filters/filters_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -20,7 +20,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = '';
   int _navIndex = 0;
 
-  // departments fetched from API (each entry is Map with keys like id, name, image_url, count)
+  final TextEditingController _searchCtl = TextEditingController();
+
   List<Map<String, dynamic>> _departments = [];
 
   @override
@@ -29,17 +30,21 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
+  @override
+  void dispose() {
+    _searchCtl.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final api = auth.authService.api;
 
-      // load doctors & appointments in parallel
-      final doctorsFuture = api.getDoctors();
+      final doctorsFuture = api.getTopRatedDoctors(limit: 10);
       final appointmentsFuture = api.getMyAppointments();
 
-      // try to load departments from API (may throw)
       List<Map<String, dynamic>> departmentsFromApi = [];
       try {
         final deps = await api.getDepartments();
@@ -48,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (d is Map<String, dynamic>) {
               final id = d['id'] ?? d['department_id'] ?? d['dept_id'];
               final name =
-                  (d['name'] ?? d['title'] ?? d['department_name'] ?? '')!
+                  (d['name'] ?? d['title'] ?? d['department_name'] ?? '')
                       .toString();
               final imageUrl =
                   d['image_url'] ??
@@ -68,21 +73,24 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           }
         }
-      } catch (e) {}
+      } catch (_) {}
 
       final doctors = await doctorsFuture;
       final appointments = await appointmentsFuture;
 
-      // fallback: build departments from doctors if API didn't return useful data
       if (departmentsFromApi.isEmpty) {
         final Map<String, int> counts = {};
         for (final d in doctors) {
-          final spec =
-              (d['specialization'] ??
-                      d['category'] ??
-                      d['department'] ??
-                      d['dept'])
+          final depName =
+              (d['department'] is Map
+                      ? (d['department']['name'] ?? d['department']['title'])
+                      : (d['department_name'] ?? d['department']))
                   ?.toString();
+
+          final spec =
+              (d['specialization'] ?? d['category'] ?? depName ?? d['dept'])
+                  ?.toString();
+
           if (spec == null || spec.isEmpty) continue;
           counts[spec] = (counts[spec] ?? 0) + 1;
         }
@@ -129,6 +137,60 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _searchDoctors() {
+    final q = _searchQuery.trim();
+    if (q.isEmpty) return;
+
+    Navigator.pushNamed(
+      context,
+      '/doctors',
+      arguments: {'q': q, 'title': 'Search: $q'},
+    );
+  }
+
+  Future<void> _openFilters() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FiltersScreen()),
+    );
+
+    if (result is Map<String, dynamic>) {
+      Navigator.pushNamed(
+        context,
+        '/doctors',
+        arguments: {'filters': result, 'title': 'Filtered Doctors'},
+      );
+    }
+  }
+
+  List<dynamic> _filterDoctorsByDepartment({
+    required dynamic departmentId,
+    required String departmentName,
+  }) {
+    final depIdStr = (departmentId ?? '').toString();
+
+    return _doctors.where((d) {
+      final dep = d['department'];
+
+      final depId = dep is Map
+          ? (dep['id'] ?? dep['department_id'])
+          : d['department_id'];
+
+      final depName = dep is Map
+          ? (dep['name'] ?? dep['title'] ?? dep['department_name'])
+          : (d['department_name'] ?? d['department']);
+
+      if (depId != null && depId.toString() == depIdStr) return true;
+      if (depName != null && depName.toString() == departmentName) return true;
+
+      final spec = (d['specialization'] ?? d['category'] ?? d['dept'])
+          ?.toString();
+      if (spec != null && spec == departmentName) return true;
+
+      return false;
+    }).toList();
+  }
+
   Widget _buildDepartmentChip(Map<String, dynamic> dep) {
     final id = dep['id'];
     final name = (dep['name'] ?? 'Department').toString();
@@ -137,10 +199,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return GestureDetector(
       onTap: () {
+        final filtered = _filterDoctorsByDepartment(
+          departmentId: id,
+          departmentName: name,
+        );
+
         Navigator.pushNamed(
           context,
           '/doctors',
-          arguments: {'departmentId': id, 'departmentName': name},
+          arguments: {
+            'title': name,
+            'department_id': id,
+            'prefetched_doctors': filtered,
+          },
         );
       },
       child: Container(
@@ -160,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // thumbnail or default icon
             if (imageUrl != null && imageUrl.isNotEmpty)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -250,7 +320,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    docName,
+                    docName.toString(),
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -290,69 +360,180 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDoctorTile(dynamic d) {
-    final name = d['user']?['full_name'] ?? d['full_name'] ?? 'Doctor';
-    final spec = d['specialization'] ?? d['spec'] ?? '-';
-    final rating = d['average_rating'] ?? d['rating'] ?? 0;
-    final fee = d['consultation_fee'] ?? d['fee'] ?? 0;
+    final user = d['user'] ?? {};
+    final name = (user['full_name'] ?? d['full_name'] ?? 'Doctor').toString();
+    final spec = (d['specialization'] ?? d['spec'] ?? '-').toString();
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
-        leading: CircleAvatar(
-          radius: 28,
-          backgroundColor: AppTheme.primary.withOpacity(0.12),
-          child: const Icon(Icons.person),
-        ),
-        title: Text(
-          name,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              spec,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(Icons.star, size: 14, color: Colors.amber),
-                const SizedBox(width: 6),
-                Text(
-                  (rating is num) ? rating.toStringAsFixed(1) : '-',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Text(
-                  '\$${fee.toString()}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ],
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.arrow_forward_ios, size: 18),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => DoctorProfileScreen(doctor: d)),
-            );
-          },
-        ),
+    final ratingRaw = d['average_rating'] ?? d['rating'] ?? 0;
+    final rating = (ratingRaw is num)
+        ? ratingRaw.toDouble()
+        : double.tryParse(ratingRaw.toString()) ?? 0.0;
+
+    final feeRaw = d['consultation_fee'] ?? d['fee'] ?? 0;
+    final fee = (feeRaw is num)
+        ? feeRaw.toDouble()
+        : double.tryParse(feeRaw.toString()) ?? 0.0;
+
+    final avatarUrl = (user['avatar_url'] ?? d['avatar_url'] ?? '').toString();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => DoctorProfileScreen(doctor: d)),
           );
         },
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: avatarUrl.isNotEmpty
+                      ? Image.network(
+                          avatarUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.person),
+                        )
+                      : Icon(Icons.person, color: AppTheme.primary, size: 30),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      spec,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.poppins(
+                        color: Colors.black54,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF4D6),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: Colors.amber,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '\$${fee.toStringAsFixed(0)}',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => DoctorProfileScreen(doctor: d),
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'View',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -361,7 +542,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
 
-    // حماية: لو المستخدم غير مصادق redirect to login
     if (!auth.isAuthenticated && !auth.loading) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
@@ -396,7 +576,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // search
                     Container(
                       height: 48,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -413,12 +592,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.search, color: Colors.grey[600]),
-                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: Icon(Icons.search, color: Colors.grey[600]),
+                            onPressed: _searchDoctors,
+                          ),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: TextField(
+                              controller: _searchCtl,
                               onChanged: (v) =>
                                   setState(() => _searchQuery = v),
+                              onSubmitted: (_) => _searchDoctors(),
                               decoration: const InputDecoration(
                                 hintText: 'search doctor by name',
                                 border: InputBorder.none,
@@ -427,14 +611,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.tune),
-                            onPressed: () => _goTo('/filters'),
+                            onPressed: _openFilters,
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
 
-                    // My Appointments header
                     Row(
                       children: [
                         Text(
@@ -467,7 +650,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // appointments horizontal
                     SizedBox(
                       height: 130,
                       child: _appointments.isEmpty
@@ -489,7 +671,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     const SizedBox(height: 18),
 
-                    // departments header
                     Row(
                       children: [
                         Text(
@@ -510,7 +691,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // departments horizontal list
                     SizedBox(
                       height: 96,
                       child: _departments.isEmpty
@@ -537,30 +717,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // doctors list
                     ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _doctors.length,
-                      itemBuilder: (ctx, i) {
-                        final d = _doctors[i];
-                        final name =
-                            (d['user']?['full_name'] ?? d['full_name'] ?? '')
-                                .toString();
-                        if (_searchQuery.isNotEmpty &&
-                            !name.toLowerCase().contains(
-                              _searchQuery.toLowerCase(),
-                            )) {
-                          return const SizedBox.shrink();
-                        }
-                        return _buildDoctorTile(d);
-                      },
+                      itemBuilder: (ctx, i) => _buildDoctorTile(_doctors[i]),
                     ),
+
                     const SizedBox(height: 20),
                   ],
                 ),
               ),
       ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _navIndex,
         selectedItemColor: AppTheme.primary,
@@ -574,9 +743,6 @@ class _HomeScreenState extends State<HomeScreen> {
               _goTo('/appointments');
               break;
             case 2:
-              _goTo('/chat');
-              break;
-            case 3:
               _goTo('/profile');
               break;
           }
@@ -587,10 +753,6 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_month),
             label: 'Bookings',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
-            label: 'Chat',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),

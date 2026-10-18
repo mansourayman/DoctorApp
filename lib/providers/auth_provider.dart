@@ -1,8 +1,7 @@
 import 'dart:io';
-
 import 'package:flutter/foundation.dart';
+
 import '../services/auth_service.dart';
-import "../services/api_service.dart";
 
 class AuthProvider extends ChangeNotifier {
   final AuthService authService;
@@ -24,10 +23,56 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _tryRestore() async {
     await _setLoading(true);
     try {
-      final me = await authService.me();
-      user = me;
+      user = await authService.me();
     } catch (_) {
       user = null;
+    } finally {
+      await _setLoading(false);
+    }
+  }
+
+  Future<void> startRegisterRequestOtp({required String email}) async {
+    await _setLoading(true);
+    try {
+      await authService.api.requestOtp(email: email, purpose: 'register');
+    } finally {
+      await _setLoading(false);
+    }
+  }
+
+  Future<void> confirmRegisterOtp({
+    required String email,
+    required String code,
+    required String fullName,
+    required String phone,
+    required String password,
+    String? avatarPath,
+  }) async {
+    await _setLoading(true);
+    try {
+      await authService.api.verifyOtp(
+        email: email,
+        code: code,
+        purpose: 'register',
+      );
+
+      await authService.register({
+        'full_name': fullName,
+        'email': email,
+        'phone': phone,
+        'password': password,
+      });
+
+      await authService.loginAndSaveToken(email, password);
+      user = await authService.me();
+      notifyListeners();
+
+      if (!kIsWeb && avatarPath != null && avatarPath.trim().isNotEmpty) {
+        final f = File(avatarPath);
+        if (f.existsSync()) {
+          await uploadAvatarAndUpdate(avatarPath);
+        }
+      }
     } finally {
       await _setLoading(false);
     }
@@ -37,8 +82,7 @@ class AuthProvider extends ChangeNotifier {
     await _setLoading(true);
     try {
       await authService.loginAndSaveToken(identifier, password);
-      final me = await authService.me();
-      user = me;
+      user = await authService.me();
       notifyListeners();
     } finally {
       await _setLoading(false);
@@ -51,19 +95,9 @@ class AuthProvider extends ChangeNotifier {
     String phone,
     String password,
   ) async {
-    await _setLoading(true);
-    try {
-      await authService.register({
-        'full_name': fullName,
-        'email': email,
-        'phone': phone,
-        'password': password,
-      });
-
-      await login(email, password);
-    } finally {
-      await _setLoading(false);
-    }
+    throw Exception(
+      'Direct register is disabled. Use OTP flow: startRegisterRequestOtp() then confirmRegisterOtp().',
+    );
   }
 
   Future<void> logout() async {
@@ -80,29 +114,15 @@ class AuthProvider extends ChangeNotifier {
   Future<void> updateProfile(Map<String, dynamic> fields) async {
     await _setLoading(true);
     try {
-      final dynamic api = authService.api;
+      final api = authService.api;
+      final result = await api.updateProfile(fields);
 
-      if (api == null) {
-        throw Exception('API client is not available from AuthService.');
+      if (result is bool && !result) {
+        throw Exception('Server rejected profile update.');
       }
 
-      try {
-        final result = await api.updateProfile(fields);
-
-        if (result is bool && !result) {
-          throw Exception('Server rejected profile update.');
-        }
-      } on NoSuchMethodError catch (_) {
-        throw Exception(
-          'Api client does not implement updateProfile(fields). Add updateProfile to ApiService.',
-        );
-      }
-
-      final me = await authService.me();
-      user = me;
+      user = await authService.me();
       notifyListeners();
-    } catch (e) {
-      rethrow;
     } finally {
       await _setLoading(false);
     }
@@ -115,15 +135,9 @@ class AuthProvider extends ChangeNotifier {
   }) async {
     await _setLoading(true);
     try {
-      final dynamic api = authService.api;
-
-      if (api == null) {
-        throw Exception('API client is not available from AuthService.');
-      }
-
       if (kIsWeb) {
         throw UnsupportedError(
-          'Uploading local files is not supported on web. Provide a remote URL or implement web upload.',
+          'Uploading local files is not supported on web.',
         );
       }
 
@@ -136,31 +150,24 @@ class AuthProvider extends ChangeNotifier {
         throw Exception('File not found at provided path: $filePath');
       }
 
-      String uploadedUrl;
+      final api = authService.api;
 
-      try {
-        if (cloudinaryName != null && uploadPreset != null) {
-          uploadedUrl = await api.uploadImageToCloudinary(
-            filePath,
-            cloudName: cloudinaryName,
-            uploadPreset: uploadPreset,
-          );
-        } else {
-          uploadedUrl = await api.uploadImage(filePath);
-        }
-      } on NoSuchMethodError catch (_) {
-        throw Exception(
-          'Api client does not implement expected upload methods (uploadImage or uploadImageToCloudinary).',
+      String uploadedUrl;
+      if (cloudinaryName != null && uploadPreset != null) {
+        uploadedUrl = await api.uploadImageToCloudinary(
+          filePath,
+          cloudName: cloudinaryName,
+          uploadPreset: uploadPreset,
         );
+      } else {
+        uploadedUrl = await api.uploadImage(filePath);
       }
 
-      if (uploadedUrl == null || uploadedUrl.trim().isEmpty) {
+      if (uploadedUrl.trim().isEmpty) {
         throw Exception('Upload did not return a valid URL.');
       }
 
       await updateProfile({'avatar_url': uploadedUrl});
-    } catch (e) {
-      rethrow;
     } finally {
       await _setLoading(false);
     }

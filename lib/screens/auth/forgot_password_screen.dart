@@ -31,7 +31,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => _loading = true);
 
     try {
-      // حاول إرسال الطلب إلى الـ API (عدل المسار إن اختلف)
       final uri = Uri.parse(ApiConstants.baseUrl + '/auth/forgot-password');
       final res = await http.post(
         uri,
@@ -40,17 +39,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
 
       if (res.statusCode >= 200 && res.statusCode < 300) {
-        // تعامل مع نجاح النداء: نظهر رسالة نجاح
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني.'),
           ),
         );
-        // يمكنك الرجوع للشاشة السابقة بعد نجاح الإرسال
+
         await Future.delayed(const Duration(milliseconds: 900));
         if (mounted) Navigator.pop(context);
       } else {
-        // حاول قراءة رسالة الخطأ من الاستجابة
         String message = 'فشل إرسال الطلب';
         try {
           final j = jsonDecode(res.body);
@@ -74,10 +71,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final media = MediaQuery.of(context).size;
 
     return Scaffold(
-      // لا نعرض AppBar تقليدي لكي يشبه التصميم السابق؛ لكن يمكن إضافته بسهولة
       body: Stack(
         children: [
-          // الخلفية
           Positioned.fill(
             child: Image.asset(
               'assets/images/backGround.png',
@@ -94,7 +89,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   children: [
                     const SizedBox(height: 12),
 
-                    // زر رجوع دائري في أعلى اليسار
                     Align(
                       alignment: Alignment.topLeft,
                       child: Padding(
@@ -117,7 +111,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                     const SizedBox(height: 6),
 
-                    // البطاقة الرئيسية
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Container(
@@ -129,7 +122,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         child: Stack(
                           alignment: Alignment.topCenter,
                           children: [
-                            // الخلفية المنحنية
                             Positioned.fill(
                               top: 40,
                               child: Container(
@@ -155,7 +147,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               ),
                             ),
 
-                            // دائرة صغيرة زخرفية أو صورة (نحتفظ بدائرة فوق لأنها تصميم مشترك)
                             Positioned(
                               top: 6,
                               child: Container(
@@ -177,7 +168,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               ),
                             ),
 
-                            // عنوان وتعليمات
                             Positioned(
                               top: 150,
                               left: 28,
@@ -202,7 +192,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               ),
                             ),
 
-                            // الحقل وزر الإرسال
                             Positioned(
                               left: 22,
                               right: 22,

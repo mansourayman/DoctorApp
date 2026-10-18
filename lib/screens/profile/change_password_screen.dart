@@ -1,4 +1,3 @@
-// lib/screens/change_password_screen.dart
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -24,7 +23,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   bool _obscureNew = true;
   bool _obscureConfirm = true;
 
-  // animation controller for shake on error
   late final AnimationController _shakeController;
 
   @override
@@ -45,7 +43,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     super.dispose();
   }
 
-  // simple password strength: 0..1
   double _passwordStrength(String pwd) {
     if (pwd.isEmpty) return 0;
     var score = 0;
@@ -66,7 +63,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     required bool success,
     String? message,
   }) async {
-    // showGeneralDialog for custom animation and content
     await showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -79,9 +75,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
             message:
                 message ?? (success ? 'Password changed' : 'Change failed'),
             onOk: () {
-              Navigator.of(ctx).pop(); // close dialog
+              Navigator.of(ctx).pop();
               if (success) {
-                // go to home (change route name if needed)
                 Navigator.pushNamedAndRemoveUntil(
                   context,
                   '/home',
@@ -123,7 +118,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
           message: 'Password changed successfully',
         );
       } else {
-        // server returned non-true but no exception
         _shakeController.forward(from: 0);
         await _showResultDialog(
           success: false,
@@ -131,7 +125,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         );
       }
     } catch (e) {
-      // shake + show error message
       _shakeController.forward(from: 0);
       await _showResultDialog(success: false, message: e.toString());
     } finally {
@@ -173,7 +166,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
             child: Column(
               children: [
-                // header card
                 Card(
                   elevation: 6,
                   shape: RoundedRectangleBorder(
@@ -236,7 +228,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 ),
                 const SizedBox(height: 22),
 
-                // form card
                 Card(
                   elevation: 8,
                   shape: RoundedRectangleBorder(
@@ -269,7 +260,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                             onChanged: (_) => setState(() {}),
                           ),
                           const SizedBox(height: 8),
-                          // strength indicator row
+
                           Row(
                             children: [
                               Expanded(
@@ -320,7 +311,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                           ),
                           const SizedBox(height: 18),
 
-                          // submit button
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -360,10 +350,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                 ),
                 const SizedBox(height: 18),
 
-                // optional help text
                 TextButton(
                   onPressed: () {
-                    // maybe navigate to forgot password flow
                     Navigator.pushNamed(context, '/forgot-password');
                   },
                   child: const Text(
@@ -434,9 +422,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   }
 }
 
-/// Custom result card used inside showGeneralDialog.
-/// shows animated check or cross and message + OK button.
-/// supports shaking animation on error via shakeController.
 class _ResultCard extends StatefulWidget {
   final bool success;
   final String message;
@@ -459,7 +444,7 @@ class _ResultCardState extends State<_ResultCard> {
   @override
   void initState() {
     super.initState();
-    // if an error, play the shaking animation whenever the widget appears
+
     if (!widget.success) {
       widget.shakeController.forward(from: 0);
     }
@@ -471,10 +456,8 @@ class _ResultCardState extends State<_ResultCard> {
     return AnimatedBuilder(
       animation: widget.shakeController,
       builder: (context, child) {
-        // shake offset calculation
         final progress = widget.shakeController.value;
-        final offset =
-            sin(progress * pi * 10) * (1.0 - progress) * 12; // shake amplitude
+        final offset = sin(progress * pi * 10) * (1.0 - progress) * 12;
         return Transform.translate(offset: Offset(offset, 0), child: child);
       },
       child: Material(
@@ -496,7 +479,6 @@ class _ResultCardState extends State<_ResultCard> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // icon circle
               Container(
                 width: 88,
                 height: 88,

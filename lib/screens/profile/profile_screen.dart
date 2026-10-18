@@ -23,8 +23,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _editing = false;
   bool _saving = false;
 
-  final _cloudName =
-      'YOUR_CLOUD_NAME'; //when end the api we will add the endpoint will take
+  final _cloudName = 'YOUR_CLOUD_NAME';
   final _uploadPreset = 'YOUR_UPLOAD_PRESET';
 
   @override

@@ -1,4 +1,3 @@
-// lib/screens/splash_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lottie/lottie.dart';
@@ -29,7 +28,6 @@ class _SplashScreenState extends State<SplashScreen>
       }
     });
 
-    // Safety fallback
     Future.delayed(const Duration(seconds: 4), () {
       if (!_navigated && mounted) {
         _navigated = true;
@@ -65,9 +63,8 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // --- Lottie animation ---
               SizedBox(
-                width: size.width * 0.7, // responsive (حوالي 70% من العرض)
+                width: size.width * 0.7,
                 height: size.width * 0.7,
                 child: Lottie.asset(
                   'assets/lottie/Doctor.json',
@@ -83,7 +80,6 @@ class _SplashScreenState extends State<SplashScreen>
 
               const SizedBox(height: 28),
 
-              // --- Text below animation ---
               Text(
                 'Your Health — Our Priority',
                 textAlign: TextAlign.center,

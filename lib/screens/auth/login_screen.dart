@@ -20,7 +20,6 @@ class _LoginPageState extends State<LoginPage>
   bool _obscure = true;
   bool _remember = false;
 
-  // animation fields
   late final AnimationController _animCtrl;
   late final Animation<double> _scaleAnim;
   late final Animation<Offset> _slideAnim;
@@ -43,7 +42,6 @@ class _LoginPageState extends State<LoginPage>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
 
-    // start animation safely after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _animCtrl.forward();
     });
@@ -58,7 +56,6 @@ class _LoginPageState extends State<LoginPage>
   }
 
   Future<void> _onLoginPressed() async {
-    // validate first
     if (!_formKey.currentState!.validate()) return;
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -95,7 +92,6 @@ class _LoginPageState extends State<LoginPage>
     return Scaffold(
       body: Stack(
         children: [
-          // background gradient
           Positioned.fill(
             child: Container(
               decoration: const BoxDecoration(
@@ -108,7 +104,6 @@ class _LoginPageState extends State<LoginPage>
             ),
           ),
 
-          // soft decorative circle
           Positioned(
             top: -media.width * 0.15,
             right: -media.width * 0.15,
@@ -122,7 +117,6 @@ class _LoginPageState extends State<LoginPage>
             ),
           ),
 
-          // main content with keyboard-aware padding
           SafeArea(
             child: AnimatedPadding(
               duration: const Duration(milliseconds: 160),
@@ -139,7 +133,6 @@ class _LoginPageState extends State<LoginPage>
                     children: [
                       const SizedBox(height: 22),
 
-                      // header (logo + text) animated
                       ScaleTransition(
                         scale: _scaleAnim,
                         child: Column(
@@ -202,7 +195,6 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 28),
 
-                      // animated card with max width for tablets
                       SlideTransition(
                         position: _slideAnim,
                         child: ScaleTransition(
@@ -432,7 +424,7 @@ class _LoginPageState extends State<LoginPage>
                                             ],
                                           ),
                                           const SizedBox(height: 12),
-                                          // social buttons: responsive — Expanded + FittedBox prevents overflow
+
                                           Row(
                                             children: [
                                               Expanded(
@@ -564,7 +556,6 @@ class _LoginPageState extends State<LoginPage>
   }
 }
 
-/// Modern reusable text field used in LoginPage.
 class _ModernField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
